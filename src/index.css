@@ -1,0 +1,87 @@
+@import 'tailwindcss';
+
+/**
+ * Class-based dark mode for Tailwind v4 — toggled on `<html>` from PreferencesContext
+ * and bootstrapped early in `index.html` to reduce theme “flash” on refresh.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --color-dashboard-bg: #050508;
+  --color-dashboard-surface: rgba(255, 255, 255, 0.04);
+  --color-dashboard-border: rgba(255, 255, 255, 0.08);
+  --color-neon-from: #a855f7;
+  --color-neon-to: #6366f1;
+}
+
+@layer base {
+  html {
+    @apply scroll-smooth antialiased;
+    transition: background-color 0.35s ease, color 0.35s ease;
+  }
+
+  body {
+    @apply min-h-screen font-sans antialiased;
+    transition: background-color 0.35s ease, color 0.35s ease;
+    /* Light theme — soft paper + violet accents */
+    @apply bg-zinc-50 text-zinc-900;
+    background-image:
+      radial-gradient(ellipse 90% 60% at 50% -15%, rgba(167, 139, 250, 0.18), transparent),
+      radial-gradient(ellipse 55% 45% at 100% 0%, rgba(99, 102, 241, 0.1), transparent);
+    background-attachment: fixed;
+  }
+
+  html.dark body {
+    @apply bg-dashboard-bg text-zinc-100;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(168, 85, 247, 0.22), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgba(99, 102, 241, 0.12), transparent);
+    background-attachment: fixed;
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+
+  :where(a, button, input, textarea, select):focus-visible {
+    @apply outline-none ring-2 ring-violet-500/60 ring-offset-2 ring-offset-zinc-50 dark:ring-offset-zinc-950;
+  }
+}
+
+/* KaTeX dark mode styling */
+.dark .katex {
+  color: #e4e4e7;
+}
+
+.dark .katex .mtext {
+  color: #e4e4e7;
+}
+
+.dark .katex .mord {
+  color: #e4e4e7;
+}
+
+.dark .katex .mop {
+  color: #e4e4e7;
+}
+
+.dark .katex .mrel {
+  color: #e4e4e7;
+}
+
+.dark .katex .mbin {
+  color: #e4e4e7;
+}
+
+.dark .katex .mpunct {
+  color: #e4e4e7;
+}
+
+.dark .katex .mopen {
+  color: #e4e4e7;
+}
+
+.dark .katex .mclose {
+  color: #e4e4e7;
+}
