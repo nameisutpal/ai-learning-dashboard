@@ -180,7 +180,14 @@ export function ChatThread({ messages, streamingMessage, loading, isTyping, erro
           ))}
           {quizzes.map((quiz) => (
             <div key={quiz.id} className="mx-auto max-w-4xl">
-              <QuizCard quiz={quiz} onQuizComplete={onQuizComplete} />
+              <QuizCard quiz={quiz} onQuizComplete={(result) => {
+                console.log('[ChatThread] onQuizComplete callback fired with:', result)
+                if (onQuizComplete) {
+                  onQuizComplete(result)
+                } else {
+                  console.log('[ChatThread] onQuizComplete prop is not defined')
+                }
+              }} />
             </div>
           ))}
           {isTyping ? (

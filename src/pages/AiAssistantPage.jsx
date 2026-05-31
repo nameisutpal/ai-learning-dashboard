@@ -208,11 +208,17 @@ export function AiAssistantPage() {
   }
 
   async function handleQuizComplete(quizResult) {
-    if (!user?.uid) return
+    console.log('[AiAssistantPage] handleQuizComplete called with:', quizResult)
+    if (!user?.uid) {
+      console.log('[AiAssistantPage] User not authenticated, skipping quiz attempt save')
+      return
+    }
     try {
+      console.log('[AiAssistantPage] Calling addQuizAttempt with:', quizResult)
       await addQuizAttempt(quizResult)
+      console.log('[AiAssistantPage] addQuizAttempt completed successfully')
     } catch (err) {
-      console.error('Failed to save quiz attempt:', err)
+      console.error('[AiAssistantPage] Failed to save quiz attempt:', err)
     }
   }
 

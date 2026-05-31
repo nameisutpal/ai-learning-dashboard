@@ -14,14 +14,24 @@ export function QuizCard({ quiz, onQuizComplete }) {
   }
 
   const handleSubmit = () => {
+    console.log('[QuizCard] Quiz submitted')
     setShowResults(true)
-    
+
     // Calculate score
     const score = calculateScore()
     const percentage = Math.round((score.correct / score.total) * 100)
-    
+
+    console.log('[QuizCard] Score calculated:', score, 'Percentage:', percentage)
+
     // Notify parent component
     if (onQuizComplete) {
+      console.log('[QuizCard] Calling onQuizComplete with:', {
+        quizId: quiz.id,
+        quizTitle: quiz.title,
+        score: score.correct,
+        totalQuestions: score.total,
+        percentage,
+      })
       onQuizComplete({
         quizId: quiz.id,
         quizTitle: quiz.title,
@@ -29,6 +39,8 @@ export function QuizCard({ quiz, onQuizComplete }) {
         totalQuestions: score.total,
         percentage,
       })
+    } else {
+      console.log('[QuizCard] onQuizComplete callback is not defined')
     }
   }
 

@@ -365,16 +365,27 @@ export function FirestoreDataProvider({ children }) {
 
   const addQuizAttempt = useCallback(
     async ({ quizId, quizTitle, score, totalQuestions, percentage }) => {
-      if (!user?.uid) return
-      await addDoc(collection(db, COLLECTIONS.quizAttempts), {
-        userId: user.uid,
-        quizId,
-        quizTitle,
-        score,
-        totalQuestions,
-        percentage,
-        completedAt: serverTimestamp(),
-      })
+      console.log('[FirestoreDataContext] addQuizAttempt called with:', { quizId, quizTitle, score, totalQuestions, percentage })
+      if (!user?.uid) {
+        console.log('[FirestoreDataContext] User not authenticated, skipping quiz attempt save')
+        return
+      }
+      try {
+        console.log('[FirestoreDataContext] Writing to Firestore collection:', COLLECTIONS.quizAttempts)
+        const ref = await addDoc(collection(db, COLLECTIONS.quizAttempts), {
+          userId: user.uid,
+          quizId,
+          quizTitle,
+          score,
+          totalQuestions,
+          percentage,
+          completedAt: serverTimestamp(),
+        })
+        console.log('[FirestoreDataContext] Firestore write successful, document ID:', ref.id)
+      } catch (err) {
+        console.error('[FirestoreDataContext] Firestore write failed:', err)
+        throw err
+      }
     },
     [user],
   )
