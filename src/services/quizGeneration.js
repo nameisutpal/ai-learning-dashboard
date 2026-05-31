@@ -2,93 +2,63 @@ import { streamOpenRouterChat } from './openRouterChat.js'
 
 /**
  * Parse quiz from AI response text
- * Supports JSON, markdown lists, and numbered questions
+ * Extracts JSON from response, handling markdown code fences if present
  */
 export function parseQuizFromText(text) {
-  // Try JSON first
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[0])
-      if (parsed.questions && Array.isArray(parsed.questions)) {
-        return {
-          title: parsed.title || 'Quiz',
-          questions: parsed.questions,
-        }
-      }
-    } catch {
-      // JSON parse failed, try other formats
-    }
+  console.log('[quizGeneration] Raw AI response:', text)
+
+  // Remove markdown code fences if present
+  let cleanedText = text
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (codeBlockMatch) {
+    cleanedText = codeBlockMatch[1]
+    console.log('[quizGeneration] Extracted from code block')
   }
 
-  // Try markdown list format
-  const lines = text.split('\n').filter((line) => line.trim())
-  const questions = []
-  let currentQuestion = null
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim()
-
-    // Check for numbered question
-    const questionMatch = line.match(/^(\d+)\.\s+(.+)$/)
-    if (questionMatch) {
-      if (currentQuestion) {
-        questions.push(currentQuestion)
-      }
-      currentQuestion = {
-        question: questionMatch[2],
-        options: [],
-        correctAnswer: 0,
-      }
-      continue
-    }
-
-    // Check for options (A, B, C, D)
-    const optionMatch = line.match(/^([A-D])\.\s+(.+)$/)
-    if (optionMatch && currentQuestion) {
-      currentQuestion.options.push(optionMatch[2])
-
-      // Check for answer line
-      if (line.toLowerCase().includes('answer:')) {
-        const answerMatch = line.match(/answer:\s*([A-D])/i)
-        if (answerMatch) {
-          currentQuestion.correctAnswer = answerMatch[1].charCodeAt(0) - 65
-        }
-      }
-      continue
-    }
-
-    // Check for answer on separate line
-    if (line.toLowerCase().startsWith('answer:') && currentQuestion) {
-      const answerMatch = line.match(/answer:\s*([A-D])/i)
-      if (answerMatch) {
-        currentQuestion.correctAnswer = answerMatch[1].charCodeAt(0) - 65
-      }
-    }
+  // Try to find JSON object
+  const jsonMatch = cleanedText.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) {
+    console.error('[quizGeneration] No JSON object found in response')
+    throw new Error('No valid JSON found in AI response')
   }
 
-  if (currentQuestion) {
-    questions.push(currentQuestion)
-  }
+  try {
+    const parsed = JSON.parse(jsonMatch[0])
+    console.log('[quizGeneration] Parsed quiz object:', parsed)
 
-  if (questions.length > 0) {
+    // Validate structure
+    if (!parsed.questions || !Array.isArray(parsed.questions)) {
+      console.error('[quizGeneration] Invalid quiz structure: missing or invalid questions array')
+      throw new Error('Invalid quiz structure: missing or invalid questions array')
+    }
+
+    if (parsed.questions.length === 0) {
+      console.error('[quizGeneration] Invalid quiz structure: empty questions array')
+      throw new Error('Invalid quiz structure: empty questions array')
+    }
+
+    // Validate each question
+    for (let i = 0; i < parsed.questions.length; i++) {
+      const q = parsed.questions[i]
+      if (!q.question || !q.options || !Array.isArray(q.options) || q.options.length < 2) {
+        console.error(`[quizGeneration] Invalid question at index ${i}:`, q)
+        throw new Error(`Invalid question at index ${i}: missing question or options`)
+      }
+      if (typeof q.correctAnswer !== 'number' || q.correctAnswer < 0 || q.correctAnswer >= q.options.length) {
+        console.error(`[quizGeneration] Invalid correctAnswer at index ${i}:`, q.correctAnswer)
+        throw new Error(`Invalid correctAnswer at index ${i}: must be a valid option index`)
+      }
+    }
+
     return {
-      title: 'Quiz',
-      questions,
+      title: parsed.title || 'Quiz',
+      questions: parsed.questions,
     }
-  }
-
-  // Fallback: return raw content as single question
-  return {
-    title: 'Quiz',
-    questions: [
-      {
-        question: 'Review the following content',
-        options: ['Continue', 'Back'],
-        correctAnswer: 0,
-        rawContent: text,
-      },
-    ],
+  } catch (err) {
+    console.error('[quizGeneration] JSON parse failed:', err)
+    const error = new Error(`Failed to parse quiz JSON: ${err.message}`)
+    error.cause = err
+    throw error
   }
 }
 
@@ -99,9 +69,14 @@ export function parseQuizFromText(text) {
  * @returns {Promise<Object>} Quiz data with title and questions
  */
 export async function generateQuizFromContent(content, signal) {
-  const quizPrompt = `Generate a quiz with 5-10 multiple choice questions based on the following content. Return the quiz in one of these formats:
+  const quizPrompt = `You are a quiz generator. Generate a quiz with 5-10 multiple choice questions based on the following content.
 
-1. Valid JSON (preferred):
+CRITICAL REQUIREMENTS:
+- Return ONLY valid JSON - no markdown, no code fences, no explanations, no "Here's a quiz" text
+- The response must start with { and end with }
+- Do not include any text before or after the JSON
+
+Required JSON schema:
 {
   "title": "Quiz Title",
   "questions": [
@@ -113,31 +88,48 @@ export async function generateQuizFromContent(content, signal) {
   ]
 }
 
-2. Markdown list format:
-1. Question text
-   A. Option A
-   B. Option B
-   C. Option C
-   D. Option D
-   Answer: A
+Notes:
+- correctAnswer must be a number (0 for first option, 1 for second, etc.)
+- Each question must have exactly 4 options
+- Questions should test understanding of key concepts
 
 Content to quiz:
 ${content}`
 
-  let quizText = ''
-  await streamOpenRouterChat({
-    messages: [{ role: 'user', content: quizPrompt }],
-    signal,
-    onToken: (token) => {
-      quizText += token
-    },
-  })
+  let lastError = null
 
-  const quizData = parseQuizFromText(quizText)
+  // Retry logic: try up to 2 times
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    console.log(`[quizGeneration] Attempt ${attempt} to generate quiz`)
 
-  if (!quizData.questions || !Array.isArray(quizData.questions) || quizData.questions.length === 0) {
-    throw new Error('Invalid quiz structure: no questions found')
+    let quizText = ''
+    try {
+      await streamOpenRouterChat({
+        messages: [{ role: 'user', content: quizPrompt }],
+        signal,
+        onToken: (token) => {
+          quizText += token
+        },
+      })
+
+      console.log(`[quizGeneration] Attempt ${attempt} received response, length: ${quizText.length}`)
+
+      const quizData = parseQuizFromText(quizText)
+      console.log(`[quizGeneration] Attempt ${attempt} successfully parsed quiz`)
+      return quizData
+    } catch (err) {
+      lastError = err
+      console.error(`[quizGeneration] Attempt ${attempt} failed:`, err.message)
+
+      if (attempt < 2) {
+        console.log(`[quizGeneration] Retrying...`)
+        // Add a stronger instruction for retry
+        continue
+      }
+    }
   }
 
-  return quizData
+  // All attempts failed
+  console.error('[quizGeneration] All attempts failed')
+  throw lastError || new Error('Failed to generate quiz after multiple attempts')
 }
